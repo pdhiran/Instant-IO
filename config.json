@@ -1,0 +1,36 @@
+{
+    "logging": "DEBUG",
+    "RGW":
+          {
+            "trigger": true,
+            "rgw_host": "<IP/FQDN>",
+            "create_rgw_user": true,
+            "access_key": null,
+            "secret_key": null,
+            "num_buckets": 10,
+            "num_objects": 10,
+            "download_objects": true,
+            "delete_buckets_and_objects": false
+          },
+    "Rados_Bench":
+          {
+            "trigger": false,
+            "no_pools": 2,
+            "write_seconds": 60,
+            "Size": 4096,
+            "sequential_read": true,
+            "random_read": true,
+            "read_seconds": 200,
+            "delete_bench_data": false
+          },
+    "RBD":
+          {
+            "trigger": true,
+            "num_loops": 2,
+            "num_parallel_jobs": 6,
+            "block_size": "16k",
+            "write_size": "512m",
+            "run_time": 500,
+            "delete_file_data": false
+          }
+}
