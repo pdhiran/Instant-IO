@@ -12,7 +12,7 @@ To trigger any kind of IO, follow the following steps:
     * `source <path/to/venv>/bin/activate`
 5. Install requirements with `pip install -r requirements.txt`
 6. That's it!!!! Once you edit the config.json file as per your needs, you are good to go. All the sections that are set to ` "trigger": true` will be run on the host!!!!
-7. To run the IO's using the script after the config changes, execute : `python3 instant_io.py`.
+7. To run the IO's using the script after the config changes, execute : `python3 instant-io.py`.
 
 ## Understanding the config file and editing it as per needs.
 
