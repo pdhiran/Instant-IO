@@ -74,7 +74,7 @@ class RgwIoTools:
         Initializing the connection for the objects
         """
         # self.host = collect_hostname()
-        self.host = "10.0.103.185"
+        self.host = config['RGW']['rgw_host']
         if config['RGW']['create_rgw_user']:
             log.debug("User creation is set to true, creating a radosgw admin user with keys")
             user = f"operator_{unique_id}"
@@ -592,7 +592,7 @@ def run_rados_io():
 def run_block_io():
     """
     Creates object of class RbdFioTools and runs IO
-    :return:
+    :return: None
     """
     log.info(f"Option present to run FIO on the given Host with config :\n\n {config['RBD']}\n\n")
     RbdFioTools.complete_prereqs()
