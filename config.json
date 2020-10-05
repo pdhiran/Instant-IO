@@ -7,6 +7,7 @@
             "create_rgw_user": true,
             "access_key": null,
             "secret_key": null,
+            "create_bkt_obj": true,
             "num_buckets": 10,
             "num_objects": 10,
             "download_objects": true,

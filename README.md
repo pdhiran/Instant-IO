@@ -32,6 +32,7 @@ Various Params in the RGW section :
             "create_rgw_user": false,
             "access_key": null,
             "secret_key": null,
+            "create_bkt_obj": true,
             "num_buckets": 10,
             "num_objects": 10,
             "download_objects": true,
@@ -47,6 +48,7 @@ Various Params in the RGW section :
 7. `"num_objects": 10` -> Specifies the number of objects to be created in each bucket. Eg num_buckets is 10 and num_objects is 10, total 100 Objects will be created. 10 objects each in a bucket.
 8. `"download_objects": true` -> If true, the objects in all the buckets will be downloaded in the test folder under directory : object_downloads_<timestamp>. Eg : object_downloads_20200913090014
 9. `"delete_buckets_and_objects": false` -> If set to true, deletes all the objects and buckets created by the user.
+10. `"create_bkt_obj": true,` -> If set to true, the script will create new buckets and objects. If false, it will not create any new buckets and objects. It will just list all the objects present and other actions that are set in the conf file.
 
 
 ###### Rados_Bench section
