@@ -32,6 +32,7 @@ Various Params in the RGW section :
             "create_rgw_user": false,
             "access_key": null,
             "secret_key": null,
+            "create_bkt_obj": true,
             "num_buckets": 10,
             "num_objects": 10,
             "download_objects": true,
@@ -47,6 +48,7 @@ Various Params in the RGW section :
 7. `"num_objects": 10` -> Specifies the number of objects to be created in each bucket. Eg num_buckets is 10 and num_objects is 10, total 100 Objects will be created. 10 objects each in a bucket.
 8. `"download_objects": true` -> If true, the objects in all the buckets will be downloaded in the test folder under directory : object_downloads_<timestamp>. Eg : object_downloads_20200913090014
 9. `"delete_buckets_and_objects": false` -> If set to true, deletes all the objects and buckets created by the user.
+10. `"create_bkt_obj": true,` -> If set to true, the script will create new buckets and objects. If false, it will not create any new buckets and objects. It will just list all the objects present and other actions that are set in the conf file.
 
 
 ###### Rados_Bench section
@@ -95,3 +97,19 @@ Various Params in the RBD section :
 5. `"write_size": "512m"` -> The total size of file I/O for each thread of the job.
 6. `""run_time": 500` -> Tell fio to terminate processing after the specified period of time. It can be quite hard to determine for how long a specified job will run, so this parameter is handy to cap the total runtime to a given time.
 7. `"delete_file_data": false` -> Instructs the Script to delete the data written 
+
+###### CephFS section
+Various Params in the RBD section :
+``` 
+    "CephFS":
+          {
+            "trigger": true,
+            "num_threads": 10,
+            "num_files": 2048,
+            "file_size": 512
+          }
+```
+1. `"trigger": true` -> when set to true, The script will proceed with triggering IO for CephFS. It uses SmallFile to trigger IO. If you do not wish to trigger IO, set it to false.
+2. `"num_threads": 2,` -> Number of parallel threads that needs to be run.
+3. `"num_files": 6` -> Number of files to be created by the smallfile tool.
+4. `"file_size": 6` -> The size of each file in KB that will be created by the smallfile tool.

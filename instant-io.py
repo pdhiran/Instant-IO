@@ -6,6 +6,7 @@ from subprocess import PIPE, Popen
 import time
 import sys
 import re
+import os
 import boto.s3.connection
 
 with open('config.json', 'r') as fd:
@@ -114,7 +115,7 @@ class RgwIoTools:
         log.debug(f"all the buckets on the host are : {str(bucket_dictionary)}")
         return bucket_dictionary
 
-    def create_bucket(self, quantity):
+    def create_buckets(self, quantity):
         """
         Creates the buckets as many as specified in the
         :param quantity: no of buckets to be created
@@ -125,8 +126,11 @@ class RgwIoTools:
         for no in range(int(quantity)):
             name = f'my-bucket-{unique_id}-no-{no}'
             log.debug(f"creating bucket : {name}")
-            bucket = self.conn.create_bucket(name)
-            buckets_list.append(bucket.name)
+            try:
+                bucket = self.conn.create_bucket(name)
+                buckets_list.append(bucket.name)
+            except Exception as err:
+                log.error(f"An error occurred when creating the bucket {name}. Error message : \n {err}")
         log.debug(f"all the buckets created are : {str(buckets_list)}")
         return buckets_list
 
@@ -173,15 +177,19 @@ class RgwIoTools:
         log.info(f"creating {quantity} objects inside bucket {bucket}")
         bucket = self.conn.get_bucket(bucket)
         for no in range(int(quantity)):
-            ukey = f"objkey_no-{no}"
+            ukey = f"obj_{unique_id}_no{no}"
             log.debug(f"creating the object no : {no} with key : {ukey}")
-            key = bucket.new_key(ukey)
-            copy_string = f"""
-            This is a test object being written for the key : {ukey}
-            This python script can be used to write IO into the given host.
-            """
-            key.set_contents_from_string(copy_string)
-            obj_key_list.append(ukey)
+            try:
+                key = bucket.new_key(ukey)
+                copy_string = f"""
+                This is a test object being written for the key : {ukey}
+                This python script can be used to write IO into the given host.
+                """
+                key.set_contents_from_string(copy_string)
+                obj_key_list.append(ukey)
+            except Exception as err:
+                log.error(f"An error occurred when creating the object {ukey} in bucket {bucket}."
+                          f" Error message : \n {err}")
         log.debug(f"All the keys created are : {str(obj_key_list)}")
         return obj_key_list
 
@@ -203,9 +211,14 @@ class RgwIoTools:
             log.debug(f"selected to delete all the objects in bucket {bucket.name}")
             key_list_dict = self.list_bucket_content(bucket)
             key_list = [ob.name for ob in key_list_dict[bucket]]
+            log.debug(f"the keys obtained for bucket {bucket.name} are : {key_list}")
 
         for key in key_list:
-            bucket.delete_key(key)
+            try:
+                bucket.delete_key(key)
+            except Exception as err:
+                log.error(f"An error occurred when deleting the object {key} in bucket {bucket.name}."
+                          f" Error message : \n {err}")
             log.debug(f"Delete the object {key} in bucket {bucket.name}")
         log.info(f"done with deleting object(s) in bucket {bucket.name}")
 
@@ -221,7 +234,11 @@ class RgwIoTools:
         if len(contents[bucket.name]) >= 1:
             log.info(f"Bucket {bucket.name} is not empty. Deleting objects before deleting")
             self.delete_boto_object(bucket=bucket.name, delete_all=True)
-        self.conn.delete_bucket(bucket.name)
+        try:
+            self.conn.delete_bucket(bucket.name)
+        except Exception as err:
+            log.error(f"An error occurred when deleting bucket {bucket.name}."
+                      f" Error message : \n {err}")
         log.info(f"completed deleting bucket {bucket.name}")
 
     def download_boto_objects(self, bucket, key=None):
@@ -237,29 +254,35 @@ class RgwIoTools:
 
         bucket = self.conn.get_bucket(bucket)
         # creating a folder for downloading the files
-        fname = f"object_downloads_{unique_id}"
-        folder_create_cmd = f"mkdir {fname}"
-        log.debug(f"Creating the folder : {fname} via the command : {folder_create_cmd}")
-        cmdline(folder_create_cmd)
+        folder_name = f"object_downloads_{unique_id}"
+        if not os.path.isdir(folder_name):
+            folder_create_cmd = f"mkdir {folder_name}"
+            log.debug(f"Creating the folder : {folder_name} via the command : {folder_create_cmd}")
+            cmdline(folder_create_cmd)
         log.info(f"Downloading object(s) from the bucket {bucket.name}")
         keys = [key, ]
         if not key:
             log.debug(f"Downloading all the objects from the bucket {bucket.name}")
             bkt_content = self.list_bucket_content(bucket=bucket.name)
-            log.debug(f"\n\nInside the download method, the contents of bucket : {bucket.name} obtained"
-                      f" from list bucket content is :\n{str(bkt_content)}\n\n and the length is {len(bkt_content[bucket.name])}")
+            log.debug(f"\n\nDownloading The contents of bucket : {bucket.name}. The list of objects obtained"
+                      f" is :\n{str(bkt_content)}\n\n and number of objects is/are {len(bkt_content[bucket.name])}")
             keys = [bkt_content[bucket.name][cnt].name for cnt in range(len(bkt_content[bucket.name]))]
+            log.debug(f"All the keys obtained for downloading are : {keys}")
 
         # Proceeding to download all the keys provided
         for key in keys:
             log.debug(f"Downloading the objects {key} from the bucket {bucket.name}")
             # creating a file to download the contents of the object
             file_name = f"object_{bucket.name}_{key}.txt"
-            file_create_cmd = f"touch {fname}/{file_name}"
+            file_create_cmd = f"touch {folder_name}/{file_name}"
             cmdline(file_create_cmd)
             log.debug(f"the name of the download file is {file_name}, creating file via command : {file_create_cmd}")
-            key = bucket.get_key(key)
-            key.get_contents_to_filename(f"{fname}/{file_name}")
+            try:
+                key = bucket.get_key(key)
+                key.get_contents_to_filename(f"{folder_name}/{file_name}")
+            except Exception as err:
+                log.error(f"An error occurred when downloading the object {key} in bucket {bucket.name}."
+                          f" Error message : \n {err}")
 
     def generate_boto_obj_url(self, bucket, key=None):
         """
@@ -283,10 +306,14 @@ class RgwIoTools:
         # Proceeding to download all the keys provided
         for key in keys:
             log.debug(f"Downloading the objects {key} from the bucket {bucket.name}")
-            key_name = bucket.get_key(key)
-            obj_url = key_name.generate_url(0, query_auth=False, force_http=True)
-            log.debug(f"The URL generated is : {str(obj_url)} of type {type(obj_url)}")
-            all_url.append(obj_url)
+            try:
+                key_name = bucket.get_key(key)
+                obj_url = key_name.generate_url(0, query_auth=False, force_http=True)
+                log.debug(f"The URL generated is : {str(obj_url)} of type {type(obj_url)}")
+                all_url.append(obj_url)
+            except Exception as err:
+                log.error(f"An error occurred when generating URI the object {key} in bucket {bucket.name}."
+                          f" Error message : \n {err}")
         return all_url
 
 
@@ -305,6 +332,9 @@ class RadosIoTools:
         pool_create_cmd = f"sudo ceph osd pool create {self.pool_name} 64 64"
         log.debug(f"Creating pool : {self.pool_name} using the command : {pool_create_cmd}")
         cmdline(pool_create_cmd)
+        enable_app_cmd = f"sudo ceph osd pool application enable {self.pool_name} rados"
+        log.debug(f"Enabling rbd application on pool : {self.pool_name} using the command : {enable_app_cmd}")
+        cmdline(enable_app_cmd)
         # checking if the pool creation was successful
         all_pools = cmdline("ceph df")
         log.debug(f"All the pools in the cluster : {all_pools}")
@@ -392,6 +422,10 @@ class RbdFioTools:
         log.debug(f"Creating pool : {self.pool_name} using the command : {pool_create_cmd}")
         cmdline(pool_create_cmd)
 
+        enable_app_cmd = f"sudo ceph osd pool application enable {self.pool_name} rbd"
+        log.debug(f"Enabling rbd application on pool : {self.pool_name} using the command : {enable_app_cmd}")
+        cmdline(enable_app_cmd)
+
         # Creating a image on the given pool
         self.image_name = f"rbd_io_image_{self.__init__.calls}_{unique_id}"
         image_create = f"sudo rbd create {self.image_name} --size 4096 --pool {self.pool_name} --image-feature layering"
@@ -444,15 +478,18 @@ class RbdFioTools:
         :return: None
         """
         # cmd to install the FIO RPM on the given node for running File IO
-        cmd = "sudo yum install fio -y"
-        log.debug(f"Installing the fio rpms using the cmd {cmd}")
-        op = cmdline(cmd)
-        log.debug(f"OP of installing the FIO rpms {op}")
+        output = cmdline('sudo rpm -qa')
+        if 'fio' not in output:
+            cmd = "sudo yum install fio -y"
+            log.debug(f"Installing the fio rpms using the cmd {cmd}")
+            cmdline(cmd)
 
         # Creating a mount directory for mounting RBD images created
-        cmd = "sudo mkdir /mnt/ceph-block-device"
-        log.debug(f"Creating a mount directory using the cmd {cmd}")
-        cmdline(cmd)
+        folder_name = f"/mnt/ceph-block-device"
+        if not os.path.isdir(folder_name):
+            cmd = "sudo mkdir /mnt/ceph-block-device"
+            log.debug(f"Creating a mount directory using the cmd {cmd}")
+            cmdline(cmd)
 
         log.info("Completing the pre-reqs of installing the FIO rpm and creating the mount directory")
 
@@ -462,10 +499,13 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential write on the image : {self.image_name}")
         fio_write_cmd = f"{self.gen_fio_cmd} --name=seq_write --rw=write --name=rand_write --rw=randwrite"
-        op = cmdline(fio_write_cmd)
-        log.debug(f"Performed the Write actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_write_cmd)
+            log.debug(f"Performed the Write actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio write operations. Error : \n{err}")
 
-        # Capturning image details :
+        # Capturing image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
         log.debug(f"image details after write operations for: {self.image_name} is : \n {cmdline(details_cmd)}")
 
@@ -475,8 +515,11 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential reads on the image : {self.image_name}")
         fio_read_cmd = f"{self.gen_fio_cmd} --name=seq_read --rw=read --name=rand_read --rw=randread"
-        op = cmdline(fio_read_cmd)
-        log.debug(f"Performed the Read actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_read_cmd)
+            log.debug(f"Performed the Read actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio read operations. Error : \n{err}")
 
         # Capturning image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
@@ -488,12 +531,127 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential reads on the image : {self.image_name}")
         fio_read_cmd = f"{self.gen_fio_cmd} --name=seq_readwrite --rw=readwrite --name=rand_readwrite --rw=randrw"
-        op = cmdline(fio_read_cmd)
-        log.debug(f"Performed the Read & write actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_read_cmd)
+            log.debug(f"Performed the Read & write actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio Read/Write operations. Error : \n{err}")
 
         # Capturning image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
         log.debug(f"image details after read/write operations for: {self.image_name} is : \n {cmdline(details_cmd)}")
+
+
+class SmallFileTools:
+    """
+    Class containing all the methods required for running IO from small files.
+    """
+
+    def __init__(self):
+        """
+        Initializes the class objects by creating
+        1. Checking if cephfs_data and cephfs_metadata pools are present
+        2. Creating a mount point for file IO to be run
+        3. Mounting the share using client admin keyring
+        """
+        # 1. Checking if cephfs_data and cephfs_metadata pools are present
+        op = cmdline("ceph osd lspools")
+        log.debug(f"the op of all the pools are : \n{op}")
+        if "cephfs_data" not in op and "cephfs_metadata" not in op:
+            pool_create_cmd = f"sudo ceph osd pool create cephfs_data 64 64;" \
+                               f"sudo ceph osd pool create cephfs_metadata 64 64"
+            log.debug(f"Creating pool for ceph file using the command : {pool_create_cmd}")
+            cmdline(pool_create_cmd)
+            enable_app_cmd = f"sudo ceph osd pool application enable cephfs_data cephfs;" \
+                             f"sudo ceph osd pool application enable cephfs_metadata cephfs"
+            log.debug(f"Enabling rbd application on pool using the command : {enable_app_cmd}")
+            cmdline(enable_app_cmd)
+
+        # 2. Creating a mount point for file IO to be run
+        self.mnt_pnt = "/mnt/mycephfs"
+        if not os.path.isdir(self.mnt_pnt):
+            cmdline("mkdir /mnt/mycephfs")
+
+        # 3. Mounting the share using client admin keyring if not already mounted
+        op = cmdline("mount -l | grep ceph")
+        log.debug(f"O/P of the mount command : {op}")
+        if "/mnt/mycephfs type ceph" not in op:
+            cmd = r"mount -t ceph :/ /mnt/mycephfs -o name=admin"
+            cmdline(cmd)
+
+    @staticmethod
+    def complete_prereqs():
+        """
+        checks the pre-reqs by :
+        1. presence MDS daemon. ( atleast 1 active )
+        2. Presence of admin keyring in client node at /etc/ceph
+        3. Smallfile repo successfully cloned and ready to be used.
+        4. checking IS MOUNT HELPER IS PRESENT?
+        :return: Returns 1 if every pre-req is satisfied, otherwise returns 0 for fail
+        """
+
+        # 1 checking if MDS daemon is up and active
+        op = cmdline(command="ceph mds stat")
+        log.debug(f"O/P of command ceph mds stat is : {op}")
+        if "up:active" not in op:
+            log.error(f"No up and active MDS server was found to be running on the cluster. Unable to trigger FIO")
+            return 0
+        log.debug("At least 1 MDS daemon is up and active")
+
+        # 2. checking presence of admin keyring
+        if not os.path.isfile("/etc/ceph/ceph.client.admin.keyring"):
+            log.error(f"No Admin keyring was found on the client node. Won't be able to ")
+            return 0
+        log.debug("Admin Keyring is present in the client node")
+
+        # 3. Smallfile repo successfully cloned and ready to be used.
+        op = cmdline(command="python smallfile/smallfile_cli.py --help")
+        log.debug(f"ottput of the smallfile help cli is {op}")
+        if "usage: smallfile_cli.py" not in op:
+            log.error("failed to execute smallfile_cli.py --help... Exiting")
+            return 0
+
+        # 4. checking IS MOUNT HELPER IS PRESENT?
+        op = cmdline("stat /sbin/mount.ceph")
+        log.debug(f"the op of mount helper is: \n{op}")
+        if "File: ‘/sbin/mount.ceph’" not in op:
+            log.error("Mount helper not present in the client node. Exiting..")
+            return 0
+
+        log.info(f"All pre-req checks for small files for running CephFile IO completed successfully")
+        return 1
+
+    def run_file_write_ops(self):
+        """
+        Method to trigger the write operations for the Ceph file system
+        :return: None
+        """
+        threads = config['CephFS']['num_threads']
+        files = config['CephFS']['num_files']
+        fsize = config['CephFS']['file_size']
+        create_cmd = f"python smallfile/smallfile_cli.py --operation create --threads {threads} " \
+                     f"--file-size {fsize} --files {files} --top {self.mnt_pnt} --prefix {unique_id}" \
+                     f" --verify-read Y --response-times Y"
+        try:
+            op = cmdline(create_cmd)
+            log.debug(f"The o/p of the file write ops is : {op}")
+        except Exception as err:
+            log.error(f"The error collected from file IO write is {err}")
+
+    def run_file_read_ops(self):
+        """
+        Method to trigger the read operations for the Ceph file system
+        :return: None
+        """
+
+        #  python smallfile_cli.py --operation read --top /mnt/mycephfs/ --prefix test1
+        read_cmd = f"python smallfile/smallfile_cli.py --operation read" \
+                     f" --top {self.mnt_pnt} --prefix {unique_id}"
+        try:
+            op = cmdline(read_cmd)
+            log.debug(f"The o/p of the file read ops is : {op}")
+        except Exception as err:
+            log.error(f"The error collected from file IO read is {err}")
 
 
 def run_rgw_io():
@@ -515,17 +673,20 @@ def run_rgw_io():
 
     rgw_obj = RgwIoTools()
     # Creating no of buckets specified in the config
-    buckets = rgw_obj.create_bucket(quantity=config['RGW']['num_buckets'])
+    if config['RGW']['create_bkt_obj']:
+        log.debug("Creating new buckets")
+        rgw_obj.create_buckets(quantity=config['RGW']['num_buckets'])
 
     # Listing all the Newly created buckets
     dict_buckets = rgw_obj.list_buckets()
     bucket_list = [keys for keys in dict_buckets.keys()]
-    log.debug(f"all the buckets Created are : {str(bucket_list)}")
+    log.debug(f"all the buckets Present for the given User are are : {str(bucket_list)}")
 
-    # creating objects in each bucket as provided in the config file
-    for bkt in bucket_list:
-        obj = rgw_obj.create_bucket_object(bucket=bkt, quantity=config['RGW']['num_objects'])
-        log.debug(f"all the objects created : {str(obj)}")
+    if config['RGW']['create_bkt_obj']:
+        # creating objects in each bucket as provided in the config file
+        for bkt in bucket_list:
+            obj = rgw_obj.create_bucket_object(bucket=bkt, quantity=config['RGW']['num_objects'])
+            log.debug(f"all the objects created : {str(obj)}")
 
     # Listing the contents of a single bucket
     bkt_content_single = rgw_obj.list_bucket_content(bucket=bucket_list[0])
@@ -533,7 +694,7 @@ def run_rgw_io():
 
     # Listing contents of all the buckets created
     bkt_content_all = rgw_obj.list_bucket_content()
-    log.debug(f"\n\n\n the contets all buckets are  \n {bkt_content_all}\n\n")
+    log.debug(f"\n\n\n the contents all buckets are  \n {bkt_content_all}\n\n")
 
     # Downloading the objects created and placing them in the folder
     # bucket_name = bucket_list[0]
@@ -585,7 +746,7 @@ def run_rados_io():
         name.bench_read_ops(duration=dur_read)
 
         # Deleting the benckmark objects created
-        if config['Rados_Bench']['delete_buckets_and_objects']:
+        if config['Rados_Bench']['delete_bench_data']:
             name.bench_cleanup()
 
 
@@ -602,6 +763,21 @@ def run_block_io():
     rbd_obj.fio_readwrite_ops()
 
 
+def run_file_io():
+    """
+    Creates object of class SmallFileTools and runs IO
+    :return: None
+    """
+    if not os.path.isdir("smallfile"):
+        cmdline(command="git clone https://github.com/distributed-system-analysis/smallfile.git")
+    if not SmallFileTools.complete_prereqs():
+        log.error("Some pre-reqs for running smallfile IO not completed. Exiting.")
+        return
+    file_obj = SmallFileTools()
+    file_obj.run_file_write_ops()
+    file_obj.run_file_read_ops()
+
+
 if __name__ == '__main__':
     log.info("Starting the script to start instant IO on the given host")
     # todo: Check if RGW node is configured or not. If not, don't trigger RGW IO
@@ -611,3 +787,6 @@ if __name__ == '__main__':
         run_rados_io()
     if config['RBD']['trigger']:
         run_block_io()
+    if config['CephFS']['trigger']:
+        run_file_io()
+
