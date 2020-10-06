@@ -33,5 +33,12 @@
             "write_size": "512m",
             "run_time": 500,
             "delete_file_data": false
+          },
+    "CephFS":
+          {
+            "trigger": true,
+            "num_threads": 10,
+            "num_files": 2048,
+            "file_size": 512
           }
 }

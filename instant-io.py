@@ -499,8 +499,11 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential write on the image : {self.image_name}")
         fio_write_cmd = f"{self.gen_fio_cmd} --name=seq_write --rw=write --name=rand_write --rw=randwrite"
-        op = cmdline(fio_write_cmd)
-        log.debug(f"Performed the Write actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_write_cmd)
+            log.debug(f"Performed the Write actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio write operations. Error : \n{err}")
 
         # Capturing image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
@@ -512,8 +515,11 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential reads on the image : {self.image_name}")
         fio_read_cmd = f"{self.gen_fio_cmd} --name=seq_read --rw=read --name=rand_read --rw=randread"
-        op = cmdline(fio_read_cmd)
-        log.debug(f"Performed the Read actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_read_cmd)
+            log.debug(f"Performed the Read actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio read operations. Error : \n{err}")
 
         # Capturning image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
@@ -525,12 +531,127 @@ class RbdFioTools:
         """
         log.info(f"Performing Random and Sequential reads on the image : {self.image_name}")
         fio_read_cmd = f"{self.gen_fio_cmd} --name=seq_readwrite --rw=readwrite --name=rand_readwrite --rw=randrw"
-        op = cmdline(fio_read_cmd)
-        log.debug(f"Performed the Read & write actions. \n Output collected :\n\n {op}\n\n")
+        try:
+            op = cmdline(fio_read_cmd)
+            log.debug(f"Performed the Read & write actions. \n Output collected :\n\n {op}\n\n")
+        except Exception as err:
+            log.error(f"Encountered error during fio Read/Write operations. Error : \n{err}")
 
         # Capturning image details :
         details_cmd = f"rbd info {self.pool_name}/{self.image_name}"
         log.debug(f"image details after read/write operations for: {self.image_name} is : \n {cmdline(details_cmd)}")
+
+
+class SmallFileTools:
+    """
+    Class containing all the methods required for running IO from small files.
+    """
+
+    def __init__(self):
+        """
+        Initializes the class objects by creating
+        1. Checking if cephfs_data and cephfs_metadata pools are present
+        2. Creating a mount point for file IO to be run
+        3. Mounting the share using client admin keyring
+        """
+        # 1. Checking if cephfs_data and cephfs_metadata pools are present
+        op = cmdline("ceph osd lspools")
+        log.debug(f"the op of all the pools are : \n{op}")
+        if "cephfs_data" not in op and "cephfs_metadata" not in op:
+            pool_create_cmd = f"sudo ceph osd pool create cephfs_data 64 64;" \
+                               f"sudo ceph osd pool create cephfs_metadata 64 64"
+            log.debug(f"Creating pool for ceph file using the command : {pool_create_cmd}")
+            cmdline(pool_create_cmd)
+            enable_app_cmd = f"sudo ceph osd pool application enable cephfs_data cephfs;" \
+                             f"sudo ceph osd pool application enable cephfs_metadata cephfs"
+            log.debug(f"Enabling rbd application on pool using the command : {enable_app_cmd}")
+            cmdline(enable_app_cmd)
+
+        # 2. Creating a mount point for file IO to be run
+        self.mnt_pnt = "/mnt/mycephfs"
+        if not os.path.isdir(self.mnt_pnt):
+            cmdline("mkdir /mnt/mycephfs")
+
+        # 3. Mounting the share using client admin keyring if not already mounted
+        op = cmdline("mount -l | grep ceph")
+        log.debug(f"O/P of the mount command : {op}")
+        if "/mnt/mycephfs type ceph" not in op:
+            cmd = r"mount -t ceph :/ /mnt/mycephfs -o name=admin"
+            cmdline(cmd)
+
+    @staticmethod
+    def complete_prereqs():
+        """
+        checks the pre-reqs by :
+        1. presence MDS daemon. ( atleast 1 active )
+        2. Presence of admin keyring in client node at /etc/ceph
+        3. Smallfile repo successfully cloned and ready to be used.
+        4. checking IS MOUNT HELPER IS PRESENT?
+        :return: Returns 1 if every pre-req is satisfied, otherwise returns 0 for fail
+        """
+
+        # 1 checking if MDS daemon is up and active
+        op = cmdline(command="ceph mds stat")
+        log.debug(f"O/P of command ceph mds stat is : {op}")
+        if "up:active" not in op:
+            log.error(f"No up and active MDS server was found to be running on the cluster. Unable to trigger FIO")
+            return 0
+        log.debug("At least 1 MDS daemon is up and active")
+
+        # 2. checking presence of admin keyring
+        if not os.path.isfile("/etc/ceph/ceph.client.admin.keyring"):
+            log.error(f"No Admin keyring was found on the client node. Won't be able to ")
+            return 0
+        log.debug("Admin Keyring is present in the client node")
+
+        # 3. Smallfile repo successfully cloned and ready to be used.
+        op = cmdline(command="python smallfile/smallfile_cli.py --help")
+        log.debug(f"ottput of the smallfile help cli is {op}")
+        if "usage: smallfile_cli.py" not in op:
+            log.error("failed to execute smallfile_cli.py --help... Exiting")
+            return 0
+
+        # 4. checking IS MOUNT HELPER IS PRESENT?
+        op = cmdline("stat /sbin/mount.ceph")
+        log.debug(f"the op of mount helper is: \n{op}")
+        if "File: ‘/sbin/mount.ceph’" not in op:
+            log.error("Mount helper not present in the client node. Exiting..")
+            return 0
+
+        log.info(f"All pre-req checks for small files for running CephFile IO completed successfully")
+        return 1
+
+    def run_file_write_ops(self):
+        """
+        Method to trigger the write operations for the Ceph file system
+        :return: None
+        """
+        threads = config['CephFS']['num_threads']
+        files = config['CephFS']['num_files']
+        fsize = config['CephFS']['file_size']
+        create_cmd = f"python smallfile/smallfile_cli.py --operation create --threads {threads} " \
+                     f"--file-size {fsize} --files {files} --top {self.mnt_pnt} --prefix {unique_id}" \
+                     f" --verify-read Y --response-times Y"
+        try:
+            op = cmdline(create_cmd)
+            log.debug(f"The o/p of the file write ops is : {op}")
+        except Exception as err:
+            log.error(f"The error collected from file IO write is {err}")
+
+    def run_file_read_ops(self):
+        """
+        Method to trigger the read operations for the Ceph file system
+        :return: None
+        """
+
+        #  python smallfile_cli.py --operation read --top /mnt/mycephfs/ --prefix test1
+        read_cmd = f"python smallfile/smallfile_cli.py --operation read" \
+                     f" --top {self.mnt_pnt} --prefix {unique_id}"
+        try:
+            op = cmdline(read_cmd)
+            log.debug(f"The o/p of the file read ops is : {op}")
+        except Exception as err:
+            log.error(f"The error collected from file IO read is {err}")
 
 
 def run_rgw_io():
@@ -625,7 +746,7 @@ def run_rados_io():
         name.bench_read_ops(duration=dur_read)
 
         # Deleting the benckmark objects created
-        if config['Rados_Bench']['delete_buckets_and_objects']:
+        if config['Rados_Bench']['delete_bench_data']:
             name.bench_cleanup()
 
 
@@ -642,6 +763,21 @@ def run_block_io():
     rbd_obj.fio_readwrite_ops()
 
 
+def run_file_io():
+    """
+    Creates object of class SmallFileTools and runs IO
+    :return: None
+    """
+    if not os.path.isdir("smallfile"):
+        cmdline(command="git clone https://github.com/distributed-system-analysis/smallfile.git")
+    if not SmallFileTools.complete_prereqs():
+        log.error("Some pre-reqs for running smallfile IO not completed. Exiting.")
+        return
+    file_obj = SmallFileTools()
+    file_obj.run_file_write_ops()
+    file_obj.run_file_read_ops()
+
+
 if __name__ == '__main__':
     log.info("Starting the script to start instant IO on the given host")
     # todo: Check if RGW node is configured or not. If not, don't trigger RGW IO
@@ -651,3 +787,6 @@ if __name__ == '__main__':
         run_rados_io()
     if config['RBD']['trigger']:
         run_block_io()
+    if config['CephFS']['trigger']:
+        run_file_io()
+

@@ -97,3 +97,19 @@ Various Params in the RBD section :
 5. `"write_size": "512m"` -> The total size of file I/O for each thread of the job.
 6. `""run_time": 500` -> Tell fio to terminate processing after the specified period of time. It can be quite hard to determine for how long a specified job will run, so this parameter is handy to cap the total runtime to a given time.
 7. `"delete_file_data": false` -> Instructs the Script to delete the data written 
+
+###### CephFS section
+Various Params in the RBD section :
+``` 
+    "CephFS":
+          {
+            "trigger": true,
+            "num_threads": 10,
+            "num_files": 2048,
+            "file_size": 512
+          }
+```
+1. `"trigger": true` -> when set to true, The script will proceed with triggering IO for CephFS. It uses SmallFile to trigger IO. If you do not wish to trigger IO, set it to false.
+2. `"num_threads": 2,` -> Number of parallel threads that needs to be run.
+3. `"num_files": 6` -> Number of files to be created by the smallfile tool.
+4. `"file_size": 6` -> The size of each file in KB that will be created by the smallfile tool.
