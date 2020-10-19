@@ -93,13 +93,18 @@ class RgwIoTools:
             self.access_key = config['RGW']['access_key']
             self.secret_key = config['RGW']['secret_key']
 
-        self.conn = boto.connect_s3(
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-            host=self.host,
-            port=8080,
-            is_secure=False,  # comment if you are using ssl
-            calling_format=boto.s3.connection.OrdinaryCallingFormat(), )
+        try:
+            self.conn = boto.connect_s3(
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                host=self.host,
+                port=8080,
+                is_secure=False,  # comment if you are using ssl
+                calling_format=boto.s3.connection.OrdinaryCallingFormat(), )
+        except AttributeError as err:
+            log.error(f"Please enter the access key and Secret key as string. Error message : {err}")
+        except Exception as err:
+            log.error(f"An exception occurred during connecting with S3 . Error message : {err}")
         log.debug("successfully created a connection with the Host for IO using BOTO tool")
 
     def list_buckets(self):
@@ -270,6 +275,7 @@ class RgwIoTools:
             log.debug(f"All the keys obtained for downloading are : {keys}")
 
         # Proceeding to download all the keys provided
+        keys = [ky for ky in keys if ky[-1] != "/"]
         for key in keys:
             log.debug(f"Downloading the objects {key} from the bucket {bucket.name}")
             # creating a file to download the contents of the object
@@ -304,6 +310,7 @@ class RgwIoTools:
             keys = [bkt_content[bucket.name][cnt].name for cnt in range(len(bkt_content[bucket.name]))]
 
         # Proceeding to download all the keys provided
+        keys = [ky for ky in keys if ky[-1] != "/"]
         for key in keys:
             log.debug(f"Downloading the objects {key} from the bucket {bucket.name}")
             try:
@@ -614,7 +621,7 @@ class SmallFileTools:
         # 4. checking IS MOUNT HELPER IS PRESENT?
         op = cmdline("stat /sbin/mount.ceph")
         log.debug(f"the op of mount helper is: \n{op}")
-        if "File: ‘/sbin/mount.ceph’" not in op:
+        if "/sbin/mount.ceph" not in op:
             log.error("Mount helper not present in the client node. Exiting..")
             return 0
 
@@ -684,9 +691,21 @@ def run_rgw_io():
 
     if config['RGW']['create_bkt_obj']:
         # creating objects in each bucket as provided in the config file
-        for bkt in bucket_list:
-            obj = rgw_obj.create_bucket_object(bucket=bkt, quantity=config['RGW']['num_objects'])
-            log.debug(f"all the objects created : {str(obj)}")
+        user_val = config['RGW']['avoid_user_created_bkts']
+        if user_val:
+            if user_val.upper() == "ALL":
+                bucket_li = [bkt for bkt in bucket_list if unique_id in bkt]
+            else:
+                ignore_list = [bkt.strip() for bkt in user_val.split(",")]
+                bucket_li = [bkt for bkt in bucket_list if bkt not in ignore_list]
+            log.debug(f"The list of buckets after removing the user provided exclude list is :\n{bucket_li}")
+            for bkt in bucket_li:
+                obj = rgw_obj.create_bucket_object(bucket=bkt, quantity=config['RGW']['num_objects'])
+                log.debug(f"all the objects created : {str(obj)}")
+        else:
+            for bkt in bucket_list:
+                obj = rgw_obj.create_bucket_object(bucket=bkt, quantity=config['RGW']['num_objects'])
+                log.debug(f"all the objects created : {str(obj)}")
 
     # Listing the contents of a single bucket
     bkt_content_single = rgw_obj.list_bucket_content(bucket=bucket_list[0])
@@ -723,6 +742,8 @@ def run_rgw_io():
 
     # deleting all the objects and the buckets created
     if config['RGW']['delete_buckets_and_objects']:
+        # deleting buckets and objects only if they have been created by the script, other wise leaving them intact.
+        bucket_list = [bkt for bkt in bucket_list if unique_id in bkt]
         for bucket in bucket_list:
             rgw_obj.delete_boto_bucket(bucket)
         list_buckets = rgw_obj.list_buckets()

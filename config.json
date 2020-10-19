@@ -8,6 +8,7 @@
             "access_key": null,
             "secret_key": null,
             "create_bkt_obj": true,
+            "avoid_user_created_bkts": "all",
             "num_buckets": 10,
             "num_objects": 10,
             "download_objects": true,
