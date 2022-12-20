@@ -132,3 +132,4 @@ dmypy.json
 .idea/vcs.xml
 .idea/dictionaries/pawan.xml
 smallfile/
+.idea/aws.xml
